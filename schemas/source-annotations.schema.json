@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/source-annotation-preview/schema/v1.json",
+  "title": "Source Annotation Document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "oneOf": [
+    {
+      "required": ["annotations"],
+      "not": { "required": ["pages"] }
+    },
+    {
+      "required": ["pages"],
+      "not": { "required": ["annotations"] }
+    }
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "annotations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/annotation"
+      }
+    },
+    "pages": {
+      "type": "array",
+      "description": "Freely named annotation pages. Page ids must be unique within this document.",
+      "items": {
+        "$ref": "#/$defs/page"
+      }
+    }
+  },
+  "$defs": {
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "annotations"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable page identity; keep it unchanged when renaming the page."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Free-form page name displayed in the preview switcher."
+        },
+        "annotations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/annotation"
+          }
+        }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "file",
+        "title",
+        "description",
+        "range"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Workspace-relative source file path."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "description": "Markdown explanation rendered in the preview."
+        },
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "startLine",
+            "endLine"
+          ],
+          "properties": {
+            "startLine": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "One-based inclusive start line."
+            },
+            "endLine": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "One-based inclusive end line."
+            }
+          }
+        }
+      }
+    }
+  }
+}

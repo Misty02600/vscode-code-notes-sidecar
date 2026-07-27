@@ -1,45 +1,32 @@
-name: Publish Extension
+name: Release
 
 on:
   push:
-    tags:
-      - v*
+    tags: ["v*"]
+
+permissions:
+  contents: write
 
 jobs:
-  publish-extension:
-    permissions:
-      id-token: write
-      contents: write
-      actions: write
-
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
-          cache: pnpm
+          node-version: 20
+          cache: npm
 
-      - run: npx changelogithub
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate and package
+        run: npm run package
+
+      - name: Create GitHub release
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-
-      - run: pnpm install
-
-      - name: Generate .vsix file
-        run: pnpm package
-
-      - name: Publish Extension
-        run: npx vsxpub --no-dependencies
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VSCE_PAT: ${{secrets.VSCE_PAT}}
-          OVSX_PAT: ${{secrets.OVSX_PAT}}
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/source-annotation-preview.vsix --generate-notes

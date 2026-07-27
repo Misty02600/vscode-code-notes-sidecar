@@ -1,0 +1,50 @@
+{
+  "$schema": "../../../../schemas/source-annotations.schema.json",
+  "version": 1,
+  "title": "Configuration loading",
+  "description": "A small demo for synchronized source annotations.",
+  "pages": [
+    {
+      "id": "reading-flow",
+      "title": "Follow the code",
+      "annotations": [
+        {
+          "id": "environment-boundary",
+          "file": "src/config.ts",
+          "title": "Read environment values at the edge",
+          "description": "Only this function reads `process.env`. The rest of the module receives ordinary values, which keeps parsing and validation deterministic.",
+          "range": {
+            "startLine": 6,
+            "endLine": 11
+          }
+        },
+        {
+          "id": "validate-port",
+          "file": "src/config.ts",
+          "title": "Validate before constructing trusted config",
+          "description": "The default is applied before validation. Callers can therefore rely on the returned port already satisfying the runtime constraint.",
+          "range": {
+            "startLine": 13,
+            "endLine": 19
+          }
+        }
+      ]
+    },
+    {
+      "id": "design-boundaries",
+      "title": "Design boundaries",
+      "annotations": [
+        {
+          "id": "trusted-config",
+          "file": "src/config.ts",
+          "title": "This function forms the trusted configuration boundary",
+          "description": "After this range returns, downstream code should consume `AppConfig` instead of reading environment variables again.",
+          "range": {
+            "startLine": 21,
+            "endLine": 32
+          }
+        }
+      ]
+    }
+  ]
+}
