@@ -1,5 +1,5 @@
 {
-  "$schema": "../../../../schemas/source-annotations.schema.json",
+  "$schema": "../../../schemas/source-annotations.schema.json",
   "version": 1,
   "title": "Configuration loading",
   "description": "A small demo for synchronized source annotations.",

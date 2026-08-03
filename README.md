@@ -30,8 +30,8 @@
 
 ## 快速开始
 
-1. 在工作区创建 `.vscode/source-annotations/`。
-2. 新建一个 JSON 文件，例如 `.vscode/source-annotations/config.json`：
+1. 在工作区根目录创建 `.code-notes/`。
+2. 新建一个 JSON 文件，例如 `.code-notes/config.json`：
 
 ```json
 {
@@ -150,17 +150,17 @@
 
 | 设置 | 默认值 | 说明 |
 | --- | --- | --- |
-| `sourceAnnotationPreview.annotationGlob` | `.vscode/source-annotations/**/*.json` | 注解文件的工作区相对 glob |
+| `sourceAnnotationPreview.annotationGlob` | `.code-notes/**/*.json` | 注解文件的工作区相对 glob |
 | `sourceAnnotationPreview.scrollSync` | `bidirectional` | `off`、`editorToPreview` 或 `bidirectional` |
 | `sourceAnnotationPreview.followActiveEditor` | `true` | 未锁定时是否跟随活动源码编辑器 |
 | `sourceAnnotationPreview.cardLayout` | `sourceAligned` | 按源码高度放置卡片，或使用紧凑连续列表 |
 
 ## 是否提交注解文件
 
-扩展不会修改项目或全局 `.gitignore`。是否把 `.vscode/source-annotations/` 纳入版本管理由仓库自己决定：
+扩展不会修改项目或个人 Git 忽略配置。是否把 `.code-notes/` 纳入版本管理由使用者自己决定：
 
 - 注解是团队共同维护、能长期解释关键设计时，可以提交。
-- 注解由个人或 AI 临时生成、随代码快速失效时，可以放入仓库自己的 `.gitignore` 或 `.git/info/exclude`。
+- 注解由个人或 AI 维护时，推荐在 `core.excludesFile` 指向的全局忽略文件中添加 `/.code-notes/`，不要改动项目的 `.gitignore`。
 
 这种选择不会影响扩展功能。
 
@@ -205,6 +205,9 @@ npm run build
 npm run package
 code --install-extension release/source-annotation-preview.vsix
 ```
+
+正式版本也可以从 [GitHub Releases](https://github.com/Misty02600/vscode-code-notes-sidecar/releases) 下载 VSIX，
+然后在 VS Code 中运行 `Extensions: Install from VSIX...` 安装。
 
 ## 数据与网络
 

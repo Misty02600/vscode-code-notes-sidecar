@@ -6,13 +6,13 @@
   "publisher": "misty-local",
   "private": true,
   "license": "MIT",
-  "homepage": "https://github.com/Misty02600/source-annotation-preview#readme",
+  "homepage": "https://github.com/Misty02600/vscode-code-notes-sidecar#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Misty02600/source-annotation-preview.git"
+    "url": "https://github.com/Misty02600/vscode-code-notes-sidecar.git"
   },
   "bugs": {
-    "url": "https://github.com/Misty02600/source-annotation-preview/issues"
+    "url": "https://github.com/Misty02600/vscode-code-notes-sidecar/issues"
   },
   "engines": {
     "vscode": "^1.95.0"
@@ -28,6 +28,7 @@
     "source code"
   ],
   "activationEvents": [
+    "workspaceContains:.code-notes/**/*.json",
     "workspaceContains:.vscode/source-annotations/**/*.json"
   ],
   "main": "./dist/extension.js",
@@ -98,7 +99,7 @@
       "properties": {
         "sourceAnnotationPreview.annotationGlob": {
           "type": "string",
-          "default": ".vscode/source-annotations/**/*.json",
+          "default": ".code-notes/**/*.json",
           "description": "Workspace-relative glob used to discover annotation documents."
         },
         "sourceAnnotationPreview.scrollSync": {
@@ -139,6 +140,8 @@
     "jsonValidation": [
       {
         "fileMatch": [
+          "/.code-notes/*.json",
+          "/.code-notes/**/*.json",
           "/.vscode/source-annotations/*.json",
           "/.vscode/source-annotations/**/*.json"
         ],
