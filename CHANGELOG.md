@@ -2,12 +2,14 @@
 
 ## 0.7.0
 
+- Use project-root `.code-notes/**/*.json` as the default annotation location, while retaining validation and activation compatibility for the legacy `.vscode/source-annotations/` path.
+- Publish versioned VSIX files and SHA-256 checksums through a version-checked GitHub Release workflow.
 - Add stable `annotation:<page-id>/<annotation-id>` links between cards in the same annotation document.
 - Switch source files and pages automatically, then expand, center, and briefly emphasize the referenced card.
 - Show a warning for malformed or missing annotation references.
 - Separate activation, controller, annotation, preview, and Webview responsibilities into focused modules.
 - Build typed Extension Host and Webview entry points while sharing the card-placement implementation.
-- Add GitHub Actions validation, VSIX artifacts, tag-based private releases, and dependency updates.
+- Add GitHub Actions validation, VSIX artifacts, tag-based releases, and dependency updates.
 
 ## 0.6.4
 

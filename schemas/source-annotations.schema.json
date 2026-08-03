@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/source-annotation-preview/schema/v1.json",
+  "$id": "https://raw.githubusercontent.com/Misty02600/vscode-code-notes-sidecar/main/schemas/source-annotations.schema.json",
   "title": "Source Annotation Document",
   "type": "object",
   "additionalProperties": false,

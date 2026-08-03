@@ -134,7 +134,7 @@ function renderAnnotationCard(
 function renderEmptyState(): string {
   return `<section class="empty">
     <h2>No annotations for this file</h2>
-    <p>Add a JSON document under <code>.vscode/source-annotations/</code>, then reload.</p>
+    <p>Add a JSON document under <code>.code-notes/</code>, then reload.</p>
   </section>`;
 }
 

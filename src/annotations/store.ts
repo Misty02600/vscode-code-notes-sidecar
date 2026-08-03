@@ -123,7 +123,7 @@ export class AnnotationStore implements vscode.Disposable {
   private get annotationGlob(): string {
     return vscode.workspace
       .getConfiguration("sourceAnnotationPreview")
-      .get("annotationGlob", ".vscode/source-annotations/**/*.json");
+      .get("annotationGlob", ".code-notes/**/*.json");
   }
 
   private resetWatchers(): void {
