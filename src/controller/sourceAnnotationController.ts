@@ -6,14 +6,20 @@ import { ResolvedAnnotation, AnnotationStore } from "../annotations/store";
 import { AnnotationPreviewPanel } from "../preview/panel";
 import {
   PreviewLayout,
-  previewOffsetToSourceLine,
-  sourceLineToPreviewOffset
+  previewScrollTopToSourceLine,
+  sourceLineToPreviewScrollTop
 } from "../preview/scrollMap";
 import { CardLayout } from "../preview/types";
 
 type ScrollSyncMode = "off" | "editorToPreview" | "bidirectional";
 
-const SCROLL_DRIVER_LOCK_MS = 500;
+const SCROLL_TARGET_TTL_MS = 500;
+
+interface PendingEditorScroll {
+  editor: vscode.TextEditor;
+  targetLine: number;
+  expiresAt: number;
+}
 
 function sameUri(left: vscode.Uri, right: vscode.Uri): boolean {
   const leftValue = left.toString();
@@ -29,7 +35,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 export class SourceAnnotationController implements vscode.Disposable {
-  private readonly output = vscode.window.createOutputChannel("Source Annotation Preview");
+  private readonly output = vscode.window.createOutputChannel("Code Notes Sidecar");
   private readonly store = new AnnotationStore(this.output);
   private readonly hoverDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
@@ -47,7 +53,9 @@ export class SourceAnnotationController implements vscode.Disposable {
   private annotations = new Map<string, ResolvedAnnotation>();
   private previewLayout: PreviewLayout | undefined;
   private previewLocked = false;
-  private ignoreEditorScrollUntil = 0;
+  private pendingEditorScrolls: PendingEditorScroll[] = [];
+  private renderedLineCount = 0;
+  private renderTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -58,6 +66,9 @@ export class SourceAnnotationController implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.renderTimer) {
+      clearTimeout(this.renderTimer);
+    }
     this.preview?.dispose();
     this.preview = undefined;
     this.clearDecorations();
@@ -70,22 +81,22 @@ export class SourceAnnotationController implements vscode.Disposable {
   private registerCommands(): void {
     this.disposables.push(
       vscode.commands.registerCommand(
-        "sourceAnnotationPreview.openPreviewToSide",
+        "codeNotesSidecar.openPreviewToSide",
         () => this.openPreviewToSide()
       ),
       vscode.commands.registerCommand(
-        "sourceAnnotationPreview.togglePreviewLock",
+        "codeNotesSidecar.togglePreviewLock",
         () => this.togglePreviewLock()
       ),
       vscode.commands.registerCommand(
-        "sourceAnnotationPreview.reloadAnnotations",
+        "codeNotesSidecar.reloadAnnotations",
         async () => {
           await this.store.reload();
           void vscode.window.showInformationMessage("Source annotations reloaded.");
         }
       ),
       vscode.commands.registerCommand(
-        "sourceAnnotationPreview.copyAnnotationStub",
+        "codeNotesSidecar.copyAnnotationStub",
         () => this.copyAnnotationStub()
       )
     );
@@ -95,20 +106,23 @@ export class SourceAnnotationController implements vscode.Disposable {
     this.disposables.push(
       this.store.onDidChange(() => this.renderCurrentDocument()),
       vscode.window.onDidChangeActiveTextEditor(editor => {
+        if (!editor || !this.preview || !this.canPreview(editor)) {
+          return;
+        }
         if (
-          editor &&
-          this.preview &&
-          !this.previewLocked &&
-          this.followActiveEditor &&
-          this.canPreview(editor)
+          this.sourceEditor &&
+          sameUri(editor.document.uri, this.sourceEditor.document.uri)
         ) {
-          if (
-            this.sourceEditor &&
-            sameUri(editor.document.uri, this.sourceEditor.document.uri)
-          ) {
-            this.sourceEditor = editor;
-            return;
+          this.sourceEditor = editor;
+          this.pendingEditorScrolls = this.pendingEditorScrolls.filter(
+            pending => pending.editor === editor
+          );
+          if (this.pendingEditorScrolls.length === 0) {
+            this.syncEditorToPreview(editor.visibleRanges);
           }
+          return;
+        }
+        if (!this.previewLocked && this.followActiveEditor) {
           this.bindSourceEditor(editor);
         }
       }),
@@ -120,15 +134,25 @@ export class SourceAnnotationController implements vscode.Disposable {
           this.renderCurrentDocument();
         }
       }),
+      vscode.workspace.onDidChangeTextDocument(event => {
+        if (
+          this.sourceEditor &&
+          sameUri(event.document.uri, this.sourceEditor.document.uri) &&
+          event.document.lineCount !== this.renderedLineCount
+        ) {
+          this.previewLayout = undefined;
+          this.scheduleRender();
+        }
+      }),
       vscode.workspace.onDidChangeConfiguration(event => {
-        if (event.affectsConfiguration("sourceAnnotationPreview.annotationGlob")) {
+        if (event.affectsConfiguration("codeNotesSidecar.annotationGlob")) {
           void this.store.refreshConfiguration();
         }
-        if (event.affectsConfiguration("sourceAnnotationPreview.scrollSync")) {
+        if (event.affectsConfiguration("codeNotesSidecar.scrollSync")) {
           this.syncEditorToPreview();
         }
         if (
-          event.affectsConfiguration("sourceAnnotationPreview.cardLayout") ||
+          event.affectsConfiguration("codeNotesSidecar.cardLayout") ||
           event.affectsConfiguration("editor.lineHeight") ||
           event.affectsConfiguration("editor.fontSize")
         ) {
@@ -140,19 +164,19 @@ export class SourceAnnotationController implements vscode.Disposable {
 
   private get followActiveEditor(): boolean {
     return vscode.workspace
-      .getConfiguration("sourceAnnotationPreview")
+      .getConfiguration("codeNotesSidecar")
       .get("followActiveEditor", true);
   }
 
   private get scrollSyncMode(): ScrollSyncMode {
     return vscode.workspace
-      .getConfiguration("sourceAnnotationPreview")
+      .getConfiguration("codeNotesSidecar")
       .get<ScrollSyncMode>("scrollSync", "bidirectional");
   }
 
   private get cardLayout(): CardLayout {
     return vscode.workspace
-      .getConfiguration("sourceAnnotationPreview")
+      .getConfiguration("codeNotesSidecar")
       .get<CardLayout>("cardLayout", "sourceAligned");
   }
 
@@ -172,12 +196,19 @@ export class SourceAnnotationController implements vscode.Disposable {
         leave: () => this.clearDecorations(),
         pageChange: () => {
           this.previewLayout = undefined;
+          this.pendingEditorScrolls = [];
           this.clearDecorations();
         },
         select: key => void this.selectAnnotation(key),
         previewScroll: (scrollTop, clientHeight) =>
           this.handlePreviewScroll(scrollTop, clientHeight),
         layout: (layout, syncEditor) => {
+          if (
+            !this.sourceEditor ||
+            layout.lineCount !== this.sourceEditor.document.lineCount
+          ) {
+            return;
+          }
           this.previewLayout = layout;
           if (syncEditor) {
             this.syncEditorToPreview();
@@ -220,6 +251,7 @@ export class SourceAnnotationController implements vscode.Disposable {
     }
     this.sourceEditor = editor;
     this.previewLayout = undefined;
+    this.pendingEditorScrolls = [];
     this.renderCurrentDocument();
   }
 
@@ -227,8 +259,15 @@ export class SourceAnnotationController implements vscode.Disposable {
     if (!this.preview || !this.sourceEditor) {
       return;
     }
+    if (this.renderTimer) {
+      clearTimeout(this.renderTimer);
+      this.renderTimer = undefined;
+    }
     const current = this.store.getForDocument(this.sourceEditor.document.uri);
     this.annotations = new Map(current.map(annotation => [annotation.key, annotation]));
+    this.renderedLineCount = this.sourceEditor.document.lineCount;
+    this.previewLayout = undefined;
+    this.pendingEditorScrolls = [];
     this.preview.update(
       this.sourceEditor.document,
       current,
@@ -236,6 +275,16 @@ export class SourceAnnotationController implements vscode.Disposable {
       this.editorLineHeight(this.sourceEditor),
       this.cardLayout
     );
+  }
+
+  private scheduleRender(): void {
+    if (this.renderTimer) {
+      clearTimeout(this.renderTimer);
+    }
+    this.renderTimer = setTimeout(() => {
+      this.renderTimer = undefined;
+      this.renderCurrentDocument();
+    }, 100);
   }
 
   private editorLineHeight(editor: vscode.TextEditor): number {
@@ -261,13 +310,14 @@ export class SourceAnnotationController implements vscode.Disposable {
       !this.preview ||
       !this.sourceEditor ||
       this.scrollSyncMode === "off" ||
-      Date.now() < this.ignoreEditorScrollUntil ||
-      !sameUri(event.textEditor.document.uri, this.sourceEditor.document.uri) ||
+      event.textEditor !== this.sourceEditor ||
       event.visibleRanges.length === 0
     ) {
       return;
     }
-    this.sourceEditor = event.textEditor;
+    if (this.consumePendingEditorScroll(event)) {
+      return;
+    }
     this.syncEditorToPreview(event.visibleRanges);
   }
 
@@ -277,6 +327,7 @@ export class SourceAnnotationController implements vscode.Disposable {
       !this.previewLayout ||
       !this.sourceEditor ||
       this.scrollSyncMode === "off" ||
+      this.previewLayout.lineCount !== this.sourceEditor.document.lineCount ||
       this.previewLayout.anchors.length === 0
     ) {
       return;
@@ -286,20 +337,11 @@ export class SourceAnnotationController implements vscode.Disposable {
     if (visibleRanges.length === 0) {
       return;
     }
-    const centerLine = this.visibleCenterLine(visibleRanges, this.sourceEditor.document);
-    const previewCenter = sourceLineToPreviewOffset(
-      centerLine,
+    const topLine = this.visibleTopLine(visibleRanges, this.sourceEditor.document);
+    const targetScroll = sourceLineToPreviewScrollTop(
+      topLine,
       this.previewLayout,
       this.sourceEditor.document.lineCount
-    );
-    const maximumScroll = Math.max(
-      0,
-      this.previewLayout.scrollHeight - this.previewLayout.clientHeight
-    );
-    const targetScroll = clamp(
-      previewCenter - this.previewLayout.clientHeight / 2,
-      0,
-      maximumScroll
     );
     this.preview.scrollTo(targetScroll);
   }
@@ -309,6 +351,7 @@ export class SourceAnnotationController implements vscode.Disposable {
       !this.previewLayout ||
       !this.sourceEditor ||
       this.scrollSyncMode !== "bidirectional" ||
+      this.previewLayout.lineCount !== this.sourceEditor.document.lineCount ||
       this.previewLayout.anchors.length === 0
     ) {
       return;
@@ -319,58 +362,90 @@ export class SourceAnnotationController implements vscode.Disposable {
       return;
     }
     const layout = { ...this.previewLayout, clientHeight };
-    const targetLine = previewOffsetToSourceLine(
-      scrollTop + clientHeight / 2,
+    const targetLine = previewScrollTopToSourceLine(
+      scrollTop,
       layout,
       editor.document.lineCount
     );
+    const line = Math.round(
+      clamp(targetLine, 0, Math.max(0, editor.document.lineCount - 1))
+    );
     if (editor.visibleRanges.length > 0) {
-      const currentCenter = this.visibleCenterLine(editor.visibleRanges, editor.document);
-      if (Math.abs(currentCenter - targetLine) < 0.2) {
+      const currentTop = this.visibleTopLine(editor.visibleRanges, editor.document);
+      if (Math.floor(currentTop) === line) {
         return;
       }
     }
 
-    const fractionalLine = clamp(
-      targetLine,
-      0,
-      Math.max(0, editor.document.lineCount - 1)
-    );
-    const line = Math.floor(fractionalLine);
-    const fraction = fractionalLine - line;
-    const sourceText = editor.document.lineAt(line).text;
-    const character = clamp(
-      Math.floor(fraction * (sourceText.length + 1)),
-      0,
-      sourceText.length
-    );
-    this.ignoreEditorScrollUntil = Date.now() + SCROLL_DRIVER_LOCK_MS;
-    const position = new vscode.Position(line, character);
+    this.expectEditorScroll(editor, line);
+    const position = new vscode.Position(line, 0);
     const end =
       line + 1 < editor.document.lineCount
         ? new vscode.Position(line + 1, 0)
         : editor.document.lineAt(line).range.end;
     editor.revealRange(
       new vscode.Range(position, end),
-      vscode.TextEditorRevealType.InCenter
+      vscode.TextEditorRevealType.AtTop
     );
   }
 
-  private visibleCenterLine(
+  private visibleTopLine(
     ranges: readonly vscode.Range[],
     document: vscode.TextDocument
   ): number {
     const first = ranges[0]!;
-    const last = ranges[ranges.length - 1]!;
-    const top = this.fractionalLine(first.start, document);
-    const bottom = this.fractionalLine(last.end, document);
-    if (top <= 0) {
-      return 0;
+    return this.fractionalLine(first.start, document);
+  }
+
+  private consumePendingEditorScroll(
+    event: vscode.TextEditorVisibleRangesChangeEvent
+  ): boolean {
+    const now = Date.now();
+    this.pendingEditorScrolls = this.pendingEditorScrolls.filter(
+      pending => pending.expiresAt >= now
+    );
+    const pendingForEditor = this.pendingEditorScrolls.filter(
+      pending => pending.editor === event.textEditor
+    );
+    if (pendingForEditor.length === 0) {
+      return false;
     }
-    if (Math.floor(bottom) >= document.lineCount - 1) {
-      return bottom;
+
+    const actualTop = this.visibleTopLine(
+      event.visibleRanges,
+      event.textEditor.document
+    );
+    const matched = pendingForEditor.find(
+      pending => Math.floor(actualTop) === Math.floor(pending.targetLine)
+    );
+    if (matched) {
+      this.pendingEditorScrolls = this.pendingEditorScrolls.filter(
+        pending => pending !== matched
+      );
+      return true;
     }
-    return (top + bottom) / 2;
+
+    this.pendingEditorScrolls = this.pendingEditorScrolls.filter(
+      pending => pending.editor !== event.textEditor
+    );
+    return false;
+  }
+
+  private expectEditorScroll(editor: vscode.TextEditor, targetLine: number): void {
+    const now = Date.now();
+    this.pendingEditorScrolls = this.pendingEditorScrolls.filter(
+      pending =>
+        pending.expiresAt >= now &&
+        (pending.editor !== editor || pending.targetLine !== targetLine)
+    );
+    this.pendingEditorScrolls.push({
+      editor,
+      targetLine,
+      expiresAt: now + SCROLL_TARGET_TTL_MS
+    });
+    if (this.pendingEditorScrolls.length > 32) {
+      this.pendingEditorScrolls.splice(0, this.pendingEditorScrolls.length - 32);
+    }
   }
 
   private fractionalLine(position: vscode.Position, document: vscode.TextDocument): number {
@@ -445,9 +520,16 @@ export class SourceAnnotationController implements vscode.Disposable {
     if (!this.sourceEditor) {
       return undefined;
     }
-    return vscode.window.visibleTextEditors.find(editor =>
-      sameUri(editor.document.uri, this.sourceEditor!.document.uri)
+    if (vscode.window.visibleTextEditors.includes(this.sourceEditor)) {
+      return this.sourceEditor;
+    }
+    const editor = vscode.window.visibleTextEditors.find(candidate =>
+      sameUri(candidate.document.uri, this.sourceEditor!.document.uri)
     );
+    if (editor) {
+      this.sourceEditor = editor;
+    }
+    return editor;
   }
 
   private clearDecorations(): void {
@@ -460,6 +542,8 @@ export class SourceAnnotationController implements vscode.Disposable {
     this.preview = undefined;
     this.previewLayout = undefined;
     this.previewLocked = false;
+    this.pendingEditorScrolls = [];
+    this.renderedLineCount = 0;
     this.annotations.clear();
     this.clearDecorations();
   }
@@ -573,10 +657,14 @@ export class SourceAnnotationController implements vscode.Disposable {
       return undefined;
     }
 
-    this.ignoreEditorScrollUntil = Date.now() + SCROLL_DRIVER_LOCK_MS;
-    let editor = vscode.window.visibleTextEditors.find(candidate =>
-      sameUri(candidate.document.uri, document.uri)
-    );
+    let editor =
+      this.sourceEditor &&
+      sameUri(this.sourceEditor.document.uri, document.uri) &&
+      vscode.window.visibleTextEditors.includes(this.sourceEditor)
+        ? this.sourceEditor
+        : vscode.window.visibleTextEditors.find(candidate =>
+            sameUri(candidate.document.uri, document.uri)
+          );
     if (!editor) {
       editor = await vscode.window.showTextDocument(document, {
         viewColumn: this.sourceEditor?.viewColumn ?? vscode.ViewColumn.One,
@@ -589,8 +677,17 @@ export class SourceAnnotationController implements vscode.Disposable {
     }
 
     this.sourceEditor = editor;
+    this.pendingEditorScrolls = this.pendingEditorScrolls.filter(
+      pending => pending.editor !== editor
+    );
     this.clearDecorations();
-    editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+    const currentTop = editor.visibleRanges[0]
+      ? this.visibleTopLine(editor.visibleRanges, editor.document)
+      : undefined;
+    if (currentTop === undefined || Math.floor(currentTop) !== range.start.line) {
+      this.expectEditorScroll(editor, range.start.line);
+    }
+    editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
     return document;
   }
 }

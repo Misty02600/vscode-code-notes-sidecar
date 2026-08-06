@@ -6,6 +6,7 @@ interface VsCodeApi {
 
 interface PreviewBootstrap {
   initialTargetKey?: string;
+  layoutRevision: number;
 }
 
 declare function acquireVsCodeApi(): VsCodeApi;
@@ -49,17 +50,44 @@ function annotationCards(): HTMLElement[] {
   );
 }
 
+function scrollAnchorCards(): HTMLElement[] {
+  const lineCount = Math.max(1, Number(track.dataset.lineCount) || 1);
+  return annotationCards().filter(card => {
+    const startLine = Number(card.dataset.startLine);
+    return Number.isFinite(startLine) && startLine >= 0 && startLine < lineCount;
+  });
+}
+
 function positionCards(): void {
   const cards = annotationCards();
   const sourceAligned = track.dataset.cardLayout === "sourceAligned";
   track.classList.toggle("source-aligned", sourceAligned);
   track.classList.toggle("compact", !sourceAligned);
 
+  if (cards.length === 0) {
+    track.style.height = "";
+    return;
+  }
+
   if (!sourceAligned) {
     track.style.height = "";
     cards.forEach(card => {
       card.style.top = "";
     });
+    const lastCard = cards[cards.length - 1]!;
+    const compactHeight = (): string => {
+      const lastTop = lastCard.offsetTop;
+      return `${Math.ceil(Math.max(
+        scrollContainer.clientHeight,
+        lastTop + scrollContainer.clientHeight,
+        lastTop + lastCard.offsetHeight + 16
+      ))}px`;
+    };
+    track.style.height = compactHeight();
+    const stableHeight = compactHeight();
+    if (track.style.height !== stableHeight) {
+      track.style.height = stableHeight;
+    }
     return;
   }
 
@@ -67,7 +95,10 @@ function positionCards(): void {
   const lineCount = Math.max(1, Number(track.dataset.lineCount) || 1);
   const cardLayout = layoutAnnotationCards(
     cards.map(card => ({
-      sourceLine: Number(card.dataset.sourceLine),
+      sourceLine: Math.min(
+        Math.max(0, Number(card.dataset.startLine) || 0),
+        lineCount - 1
+      ),
       height: card.offsetHeight
     })),
     lineHeight
@@ -86,7 +117,11 @@ function positionCards(): void {
       Math.max(maximum, placement.top + cards[index]!.offsetHeight + 16),
     0
   );
-  const nextHeight = `${Math.ceil(Math.max(sourceHeight, nextTop))}px`;
+  const lastPlacement = cardLayout.placements[cardLayout.placements.length - 1]!;
+  const alignmentHeight = lastPlacement.top + scrollContainer.clientHeight;
+  const nextHeight = `${Math.ceil(
+    Math.max(sourceHeight, nextTop, alignmentHeight)
+  )}px`;
   if (track.style.height !== nextHeight) {
     track.style.height = nextHeight;
   }
@@ -102,12 +137,11 @@ function sendLayout(syncEditor: boolean): void {
     layoutShouldSyncEditor = false;
     positionCards();
     const containerBounds = scrollContainer.getBoundingClientRect();
-    const anchors = annotationCards().map(card => {
+    const anchors = scrollAnchorCards().map(card => {
       const bounds = card.getBoundingClientRect();
       return {
-        sourceLine: Number(card.dataset.sourceLine),
-        previewOffset:
-          bounds.top - containerBounds.top + scrollContainer.scrollTop + bounds.height / 2
+        sourceLine: Number(card.dataset.startLine),
+        previewOffset: bounds.top - containerBounds.top + scrollContainer.scrollTop
       };
     });
     vscode.postMessage({
@@ -115,9 +149,20 @@ function sendLayout(syncEditor: boolean): void {
       anchors,
       scrollHeight: scrollContainer.scrollHeight,
       clientHeight: scrollContainer.clientHeight,
+      lineCount: Math.max(1, Number(track.dataset.lineCount) || 1),
+      layoutRevision: bootstrap.layoutRevision,
       syncEditor: shouldSyncEditor
     });
   }, 30);
+}
+
+function alignCardToViewportTop(card: HTMLElement): void {
+  const containerBounds = scrollContainer.getBoundingClientRect();
+  const cardBounds = card.getBoundingClientRect();
+  const targetTop =
+    scrollContainer.scrollTop + cardBounds.top - containerBounds.top;
+  suppressScrollUntil = performance.now() + 500;
+  scrollContainer.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
 }
 
 function bindAnnotationCard(card: HTMLElement): void {
@@ -144,7 +189,7 @@ function bindAnnotationCard(card: HTMLElement): void {
     });
   }
 
-  function setExpanded(expanded: boolean): void {
+  function setExpanded(expanded: boolean, alignToTop = false): void {
     if (card.classList.contains("expanded") === expanded) {
       return;
     }
@@ -154,10 +199,14 @@ function bindAnnotationCard(card: HTMLElement): void {
     expandButton.title = expanded ? "Collapse annotation" : "Expand annotation";
     requestAnimationFrame(() => {
       positionCards();
-      const topShift = card.getBoundingClientRect().top - previousTop;
-      if (Math.abs(topShift) > 0.5) {
-        suppressScrollUntil = performance.now() + 250;
-        scrollContainer.scrollTop += topShift;
+      if (alignToTop) {
+        alignCardToViewportTop(card);
+      } else {
+        const topShift = card.getBoundingClientRect().top - previousTop;
+        if (Math.abs(topShift) > 0.5) {
+          suppressScrollUntil = performance.now() + 250;
+          scrollContainer.scrollTop += topShift;
+        }
       }
       sendLayout(false);
     });
@@ -189,7 +238,7 @@ function bindAnnotationCard(card: HTMLElement): void {
     if (event.target instanceof Element && event.target.closest("button")) {
       return;
     }
-    setExpanded(!card.classList.contains("expanded"));
+    setExpanded(!card.classList.contains("expanded"), true);
     vscode.postMessage({ type: "select", annotationKey: card.dataset.annotationKey });
   });
   cancelButton.addEventListener("click", event => {
@@ -303,6 +352,11 @@ function takePreviewControl(): void {
 scrollContainer.addEventListener("wheel", takePreviewControl, { passive: true });
 scrollContainer.addEventListener("touchstart", takePreviewControl, { passive: true });
 scrollContainer.addEventListener("pointerdown", takePreviewControl, { passive: true });
+window.addEventListener("keydown", event => {
+  if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) {
+    takePreviewControl();
+  }
+}, { capture: true });
 scrollContainer.addEventListener("scroll", () => {
   if (performance.now() < suppressScrollUntil || scrollFrame !== undefined) {
     return;
@@ -312,7 +366,8 @@ scrollContainer.addEventListener("scroll", () => {
     vscode.postMessage({
       type: "previewScroll",
       scrollTop: scrollContainer.scrollTop,
-      clientHeight: scrollContainer.clientHeight
+      clientHeight: scrollContainer.clientHeight,
+      layoutRevision: bootstrap.layoutRevision
     });
   });
 }, { passive: true });
@@ -349,9 +404,11 @@ window.addEventListener("message", event => {
   }
 });
 
-const observer = new ResizeObserver(() => sendLayout(false));
-allAnnotationCards().forEach(card => observer.observe(card));
-window.addEventListener("resize", () => sendLayout(false));
+const cardObserver = new ResizeObserver(() => sendLayout(false));
+allAnnotationCards().forEach(card => cardObserver.observe(card));
+const viewportObserver = new ResizeObserver(() => sendLayout(true));
+viewportObserver.observe(scrollContainer);
+window.addEventListener("resize", () => sendLayout(true));
 
 if (initialTargetKey) {
   requestAnimationFrame(() => {
@@ -363,15 +420,7 @@ if (initialTargetKey) {
       sendLayout(true);
       return;
     }
-    const containerBounds = scrollContainer.getBoundingClientRect();
-    const targetBounds = target.getBoundingClientRect();
-    const centeredTop =
-      scrollContainer.scrollTop +
-      targetBounds.top -
-      containerBounds.top -
-      Math.max(8, (scrollContainer.clientHeight - targetBounds.height) / 2);
-    suppressScrollUntil = performance.now() + 500;
-    scrollContainer.scrollTo({ top: Math.max(0, centeredTop), behavior: "auto" });
+    alignCardToViewportTop(target);
     sendLayout(false);
     setTimeout(() => target.classList.remove("reference-target"), 1500);
   });

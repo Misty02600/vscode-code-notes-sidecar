@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Source Annotation Preview",
+      "name": "Run Code Notes Sidecar",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",

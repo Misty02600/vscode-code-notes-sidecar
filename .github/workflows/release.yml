@@ -47,8 +47,8 @@ jobs:
       - name: Prepare release assets
         shell: bash
         run: |
-          asset="release/source-annotation-preview-${RELEASE_VERSION}.vsix"
-          mv release/source-annotation-preview.vsix "${asset}"
+          asset="release/code-notes-sidecar-${RELEASE_VERSION}.vsix"
+          mv release/code-notes-sidecar.vsix "${asset}"
           sha256sum "${asset}" > "${asset}.sha256"
           echo "VSIX_ASSET=${asset}" >> "${GITHUB_ENV}"
 
@@ -60,5 +60,5 @@ jobs:
           "$VSIX_ASSET"
           "$VSIX_ASSET.sha256"
           --target "$GITHUB_SHA"
-          --title "Source Annotation Preview $RELEASE_VERSION"
+          --title "Code Notes Sidecar $RELEASE_VERSION"
           --generate-notes

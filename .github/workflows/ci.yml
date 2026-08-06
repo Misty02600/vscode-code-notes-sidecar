@@ -44,6 +44,6 @@ jobs:
       - name: Upload VSIX
         uses: actions/upload-artifact@v4
         with:
-          name: source-annotation-preview-vsix
-          path: release/source-annotation-preview.vsix
+          name: code-notes-sidecar-vsix
+          path: release/code-notes-sidecar.vsix
           if-no-files-found: error

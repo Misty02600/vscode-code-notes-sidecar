@@ -1,10 +1,9 @@
 {
-  "name": "source-annotation-preview",
-  "displayName": "Source Annotation Preview",
+  "name": "code-notes-sidecar",
+  "displayName": "Code Notes Sidecar",
   "description": "Read non-invasive, range-based source annotations in a synchronized preview beside the real editor.",
-  "version": "0.7.0",
-  "publisher": "misty-local",
-  "private": true,
+  "version": "0.7.1",
+  "publisher": "misty02600",
   "license": "MIT",
   "homepage": "https://github.com/Misty02600/vscode-code-notes-sidecar#readme",
   "repository": {
@@ -43,44 +42,44 @@
   "contributes": {
     "commands": [
       {
-        "command": "sourceAnnotationPreview.openPreviewToSide",
+        "command": "codeNotesSidecar.openPreviewToSide",
         "title": "Open Annotation Preview to the Side",
-        "category": "Source Annotation Preview",
+        "category": "Code Notes Sidecar",
         "icon": "$(open-preview)"
       },
       {
-        "command": "sourceAnnotationPreview.togglePreviewLock",
+        "command": "codeNotesSidecar.togglePreviewLock",
         "title": "Toggle Annotation Preview Lock",
-        "category": "Source Annotation Preview"
+        "category": "Code Notes Sidecar"
       },
       {
-        "command": "sourceAnnotationPreview.reloadAnnotations",
+        "command": "codeNotesSidecar.reloadAnnotations",
         "title": "Reload Annotations",
-        "category": "Source Annotation Preview",
+        "category": "Code Notes Sidecar",
         "icon": "$(refresh)"
       },
       {
-        "command": "sourceAnnotationPreview.copyAnnotationStub",
+        "command": "codeNotesSidecar.copyAnnotationStub",
         "title": "Copy Annotation Stub for Selection",
-        "category": "Source Annotation Preview"
+        "category": "Code Notes Sidecar"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "command": "sourceAnnotationPreview.openPreviewToSide",
+          "command": "codeNotesSidecar.openPreviewToSide",
           "group": "navigation@90",
           "when": "resourceScheme == file"
         }
       ],
       "editor/context": [
         {
-          "command": "sourceAnnotationPreview.openPreviewToSide",
+          "command": "codeNotesSidecar.openPreviewToSide",
           "group": "navigation@89",
           "when": "resourceScheme == file"
         },
         {
-          "command": "sourceAnnotationPreview.copyAnnotationStub",
+          "command": "codeNotesSidecar.copyAnnotationStub",
           "group": "navigation@90",
           "when": "editorHasSelection && resourceScheme == file"
         }
@@ -88,21 +87,21 @@
     },
     "keybindings": [
       {
-        "command": "sourceAnnotationPreview.openPreviewToSide",
+        "command": "codeNotesSidecar.openPreviewToSide",
         "key": "ctrl+k a",
         "mac": "cmd+k a",
         "when": "editorTextFocus && resourceScheme == file"
       }
     ],
     "configuration": {
-      "title": "Source Annotation Preview",
+      "title": "Code Notes Sidecar",
       "properties": {
-        "sourceAnnotationPreview.annotationGlob": {
+        "codeNotesSidecar.annotationGlob": {
           "type": "string",
           "default": ".code-notes/**/*.json",
-          "description": "Workspace-relative glob used to discover annotation documents."
+          "description": "Workspace-relative glob used to discover annotation documents. The default also discovers the legacy .vscode/source-annotations location."
         },
-        "sourceAnnotationPreview.scrollSync": {
+        "codeNotesSidecar.scrollSync": {
           "type": "string",
           "enum": [
             "off",
@@ -117,12 +116,12 @@
           "default": "bidirectional",
           "description": "Controls synchronized scrolling between source and preview."
         },
-        "sourceAnnotationPreview.followActiveEditor": {
+        "codeNotesSidecar.followActiveEditor": {
           "type": "boolean",
           "default": true,
           "description": "Update an unlocked preview when the active source editor changes."
         },
-        "sourceAnnotationPreview.cardLayout": {
+        "codeNotesSidecar.cardLayout": {
           "type": "string",
           "enum": [
             "sourceAligned",
@@ -155,7 +154,7 @@
     "watch": "node esbuild.mjs --watch",
     "test": "vitest run",
     "smoke": "node scripts/smoke-bundle.cjs && node --check media/preview.js",
-    "package:vsix": "vsce package --out release/source-annotation-preview.vsix",
+    "package:vsix": "vsce package --out release/code-notes-sidecar.vsix",
     "package": "npm run check && npm run test && npm run build && npm run smoke && npm run package:vsix"
   },
   "devDependencies": {

@@ -1,8 +1,15 @@
 # Changelog
 
+## 0.7.1
+
+- Align each annotation card's top edge with its source range start instead of aligning range and card centers.
+- Make normalized page origins consistently map back to the first annotation start, reserve enough trailing space to align the final card, and resynchronize after viewport or source line-count changes.
+- Keep bidirectional scrolling attached to the intended editor instance and track individual programmatic targets instead of dropping every editor scroll event for a fixed lock window.
+- Use project-root `.code-notes/**/*.json` as the default annotation location while continuing to discover, validate, and watch the legacy `.vscode/source-annotations/` path.
+- Publish under the existing `misty02600.code-notes-sidecar` Marketplace identity so commands, settings, and automatic upgrades remain compatible with 0.7.0.
+
 ## 0.7.0
 
-- Use project-root `.code-notes/**/*.json` as the default annotation location, while retaining validation and activation compatibility for the legacy `.vscode/source-annotations/` path.
 - Publish versioned VSIX files and SHA-256 checksums through a version-checked GitHub Release workflow.
 - Add stable `annotation:<page-id>/<annotation-id>` links between cards in the same annotation document.
 - Switch source files and pages automatically, then expand, center, and briefly emphasize the referenced card.
@@ -101,7 +108,7 @@
 - Preserve exact source anchors with markers and displacement connectors when cards collide.
 - Synchronize fractional visible-line centers and send preview scroll updates per animation frame.
 - Extend scroll-driver locks to prevent editor and preview feedback loops.
-- Add the `sourceAnnotationPreview.cardLayout` setting with `sourceAligned` and `compact` modes.
+- Add the `codeNotesSidecar.cardLayout` setting with `sourceAligned` and `compact` modes.
 
 ## 0.2.0
 

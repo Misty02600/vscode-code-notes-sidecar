@@ -1,5 +1,9 @@
 import * as vscode from "vscode";
 import {
+  DEFAULT_ANNOTATION_GLOB,
+  resolveAnnotationGlobs
+} from "./discovery";
+import {
   AnnotationContentPatch,
   updateAnnotationContentJson
 } from "./edit";
@@ -120,23 +124,26 @@ export class AnnotationStore implements vscode.Disposable {
     this.changeEmitter.dispose();
   }
 
-  private get annotationGlob(): string {
-    return vscode.workspace
-      .getConfiguration("sourceAnnotationPreview")
-      .get("annotationGlob", ".code-notes/**/*.json");
+  private get annotationGlobs(): string[] {
+    const configuredGlob = vscode.workspace
+      .getConfiguration("codeNotesSidecar")
+      .get("annotationGlob", DEFAULT_ANNOTATION_GLOB);
+    return resolveAnnotationGlobs(configuredGlob);
   }
 
   private resetWatchers(): void {
     this.watchers.splice(0).forEach(watcher => watcher.dispose());
 
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
-      const watcher = vscode.workspace.createFileSystemWatcher(
-        new vscode.RelativePattern(folder, this.annotationGlob)
-      );
-      watcher.onDidCreate(() => this.scheduleReload());
-      watcher.onDidChange(() => this.scheduleReload());
-      watcher.onDidDelete(() => this.scheduleReload());
-      this.watchers.push(watcher);
+      for (const annotationGlob of this.annotationGlobs) {
+        const watcher = vscode.workspace.createFileSystemWatcher(
+          new vscode.RelativePattern(folder, annotationGlob)
+        );
+        watcher.onDidCreate(() => this.scheduleReload());
+        watcher.onDidChange(() => this.scheduleReload());
+        watcher.onDidDelete(() => this.scheduleReload());
+        this.watchers.push(watcher);
+      }
     }
   }
 
@@ -158,12 +165,18 @@ export class AnnotationStore implements vscode.Disposable {
     let annotationCount = 0;
 
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
-      const files = await vscode.workspace.findFiles(
-        new vscode.RelativePattern(folder, this.annotationGlob),
-        new vscode.RelativePattern(folder, "**/{.git,node_modules}/**")
-      );
+      const filesByUri = new Map<string, vscode.Uri>();
+      for (const annotationGlob of this.annotationGlobs) {
+        const files = await vscode.workspace.findFiles(
+          new vscode.RelativePattern(folder, annotationGlob),
+          new vscode.RelativePattern(folder, "**/{.git,node_modules}/**")
+        );
+        for (const file of files) {
+          filesByUri.set(uriKey(file), file);
+        }
+      }
 
-      for (const file of files) {
+      for (const file of filesByUri.values()) {
         annotationDocumentKeys.add(uriKey(file));
         documentCount += 1;
 

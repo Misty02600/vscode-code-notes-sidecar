@@ -18,13 +18,14 @@ export class AnnotationPreviewPanel implements vscode.Disposable {
   private locked = false;
   private sourceLineHeight = 21;
   private cardLayout: CardLayout = "sourceAligned";
+  private layoutRevision = 0;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly handlers: AnnotationPreviewHandlers
   ) {
     this.panel = vscode.window.createWebviewPanel(
-      "sourceAnnotationPreview",
+      "codeNotesSidecar",
       "Source Annotations",
       { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
       {
@@ -60,6 +61,7 @@ export class AnnotationPreviewPanel implements vscode.Disposable {
     this.locked = locked;
     this.sourceLineHeight = sourceLineHeight;
     this.cardLayout = cardLayout;
+    this.layoutRevision += 1;
     this.panel.title = `Annotations — ${path.basename(document.uri.fsPath || document.uri.path)}`;
     this.panel.webview.html = renderPreviewHtml({
       extensionUri: this.extensionUri,
@@ -70,7 +72,8 @@ export class AnnotationPreviewPanel implements vscode.Disposable {
       revealAnnotationKey: this.pendingRevealAnnotationKey,
       locked,
       sourceLineHeight,
-      cardLayout
+      cardLayout,
+      layoutRevision: this.layoutRevision
     });
     this.pendingRevealAnnotationKey = undefined;
   }
@@ -137,7 +140,11 @@ export class AnnotationPreviewPanel implements vscode.Disposable {
         }
         break;
       case "previewScroll":
-        if (finiteNumber(candidate.scrollTop) && finiteNumber(candidate.clientHeight)) {
+        if (
+          candidate.layoutRevision === this.layoutRevision &&
+          finiteNumber(candidate.scrollTop) &&
+          finiteNumber(candidate.clientHeight)
+        ) {
           this.handlers.previewScroll(candidate.scrollTop, candidate.clientHeight);
         }
         break;
@@ -182,9 +189,11 @@ export class AnnotationPreviewPanel implements vscode.Disposable {
 
   private handleLayout(candidate: Record<string, unknown>): void {
     if (
+      candidate.layoutRevision !== this.layoutRevision ||
       !Array.isArray(candidate.anchors) ||
       !finiteNumber(candidate.scrollHeight) ||
-      !finiteNumber(candidate.clientHeight)
+      !finiteNumber(candidate.clientHeight) ||
+      !finiteNumber(candidate.lineCount)
     ) {
       return;
     }
@@ -201,7 +210,8 @@ export class AnnotationPreviewPanel implements vscode.Disposable {
       {
         anchors,
         scrollHeight: candidate.scrollHeight,
-        clientHeight: candidate.clientHeight
+        clientHeight: candidate.clientHeight,
+        lineCount: candidate.lineCount
       },
       candidate.syncEditor === true
     );

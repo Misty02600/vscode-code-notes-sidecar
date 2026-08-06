@@ -14,6 +14,7 @@ interface PreviewHtmlState {
   locked: boolean;
   sourceLineHeight: number;
   cardLayout: CardLayout;
+  layoutRevision: number;
 }
 
 const markdown = new MarkdownIt({
@@ -92,15 +93,11 @@ function renderAnnotationCard(
   const warning = invalid
     ? `<div class="warning">The saved range is outside the current file.</div>`
     : "";
-  const sourceLine =
-    (annotation.range.startLine + annotation.range.endLine) / 2 - 1;
-
   return `<article class="annotation-card${invalid ? " invalid" : ""}${expanded ? " expanded reference-target" : ""}"
     data-annotation-key="${escapeHtml(annotation.key)}"
     data-page-key="${escapeHtml(annotation.pageKey)}"${visible ? "" : " hidden"}
     data-start-line="${annotation.range.startLine - 1}"
-    data-end-line="${annotation.range.endLine - 1}"
-    data-source-line="${sourceLine}">
+    data-end-line="${annotation.range.endLine - 1}">
     <div class="card-view">
       <div class="card-heading">
         <button class="expand-button" type="button" aria-expanded="${expanded ? "true" : "false"}" title="${expanded ? "Collapse" : "Expand"} annotation">›</button>
@@ -189,7 +186,10 @@ export function renderPreviewHtml(state: PreviewHtmlState): string {
       data-line-height="${state.sourceLineHeight}"
       data-card-layout="${state.cardLayout}">${cards || renderEmptyState()}</main>
   </div>
-  <script id="preview-bootstrap" type="application/json" nonce="${nonce}">${scriptJson({ initialTargetKey })}</script>
+  <script id="preview-bootstrap" type="application/json" nonce="${nonce}">${scriptJson({
+    initialTargetKey,
+    layoutRevision: state.layoutRevision
+  })}</script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

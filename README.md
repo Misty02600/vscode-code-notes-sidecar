@@ -1,4 +1,4 @@
-# Source Annotation Preview
+# Code Notes Sidecar
 
 一个面向 VS Code 的非侵入式源码注解预览扩展。源码保留在普通编辑器中，解释性文字放在独立 JSON 文件里，并在右侧预览栏按代码位置排列。
 
@@ -20,15 +20,17 @@
 - 注解卡片默认折叠为标题和行号，点击标题区域后展开 Markdown 正文。
 - 一条注解可以对应连续多行代码，而不只是某一行。
 - 悬停右侧卡片时，高亮左侧对应的整个代码范围；移出后恢复。
-- 点击卡片标题时展开正文并将对应代码滚入视野，但不保留固定高亮。
+- 点击卡片标题时展开正文，并将对应代码起始行和卡片顶部对齐，但不保留固定高亮。
 - 在右侧卡片中直接编辑标题和 Markdown 正文，并保存回原注解 JSON。
 - Markdown 可以通过稳定的页面 ID 和注解 ID 引用另一张卡片；点击后自动切页、展开并定位目标。
 - 编辑器滚动时，右侧预览跟随；在双向模式下，右侧滚动也会带动左侧代码。
-- 默认按编辑器行高保留卡片之间的相对源码距离，同时去掉第一张卡片之前的无内容留白。
+- 默认让卡片顶部对应代码范围的起始行，并按编辑器行高保留各起点之间的相对距离；第一张卡片之前不保留无内容留白。
 - 注解文件变化后自动刷新，不往源码中插入注释。
 - 可锁定预览，使其在切换编辑器时仍保留当前文件。
 
 ## 快速开始
+
+先从 VS Code Marketplace 安装 `misty02600.code-notes-sidecar`，或运行 `code --install-extension misty02600.code-notes-sidecar`。
 
 1. 在工作区根目录创建 `.code-notes/`。
 2. 新建一个 JSON 文件，例如 `.code-notes/config.json`：
@@ -101,14 +103,14 @@
 
 例如，把 Markdown 链接文字 `[查看环境同步的设计取舍]` 与链接目标 `(annotation:design-decisions/decision-single-locked-environment)` 紧接着写在一起，中间不要添加空格。
 
-点击后，预览会切换到目标页面、展开目标卡片、将它滚动到视野中并短暂强调；目标如果对应同一注解 JSON 中的另一个源码文件，左侧也会打开并定位那个文件。引用按 `page.id` 与 `annotation.id` 解析，不依赖标题或行号，因此标题修改和代码范围调整不会破坏链接。
+点击后，预览会切换到目标页面，将目标代码起始行和卡片顶部对齐，展开卡片并短暂强调；目标如果对应同一注解 JSON 中的另一个源码文件，左侧也会打开并定位那个文件。引用按 `page.id` 与 `annotation.id` 解析，不依赖标题或行号，因此标题修改和代码范围调整不会破坏链接。
 
 交叉引用目前限定在同一个注解 JSON 文档内。目标页面必须使用显式 `id`；找不到目标或链接格式错误时，扩展会显示警告，而不是静默跳转到错误位置。
 
 3. 打开对应源码文件，通过以下任一入口打开预览：
 
    - 按 `Ctrl+K A`；macOS 使用 `Cmd+K A`。
-   - 在编辑器中右键，选择 `Source Annotation Preview: Open Annotation Preview to the Side`。
+   - 在编辑器中右键，选择 `Code Notes Sidecar: Open Annotation Preview to the Side`。
    - 在命令面板运行同名命令。
    - 点击编辑器标题栏中的预览按钮。
 
@@ -121,26 +123,28 @@
 | `Ctrl+K A` / `Cmd+K A` | 在右侧打开当前文件的注解预览 |
 | 编辑器右键打开预览 | 与快捷键执行相同命令 |
 | 悬停注解卡片 | 临时高亮对应的多行代码 |
-| 点击卡片标题 | 展开或收起正文，同时将对应代码滚入视野；高亮不会固定保留 |
+| 点击卡片标题 | 展开或收起正文，同时将对应代码起始行定位到编辑器顶部；高亮不会固定保留 |
 | 点击展开箭头 | 只展开或收起正文，不改变左侧选择 |
-| 点击 `annotation:` 交叉引用 | 切页并定位、展开和短暂强调目标注解 |
+| 点击 `annotation:` 交叉引用 | 切页，将目标代码起始行和卡片顶部对齐，并展开、短暂强调目标注解 |
 | 点击卡片中的 `Edit` | 就地编辑注解；`Ctrl/Cmd+Enter` 保存，`Esc` 取消 |
 | 在工具栏选择页面 | 切换当前文件的注解角度，并按新页面重新对齐滚动 |
-| 滚动源码 | 右侧按代码中心位置平滑跟随 |
-| 滚动预览 | 在 `bidirectional` 模式下，将对应代码移到编辑器中心附近 |
+| 滚动源码 | 右侧按可见代码的顶部位置跟随 |
+| 滚动预览 | 在 `bidirectional` 模式下，将右侧顶部对应的代码行移到编辑器顶部 |
 | 点击工具栏锁图标 | 锁定或解锁当前预览文件 |
 | 点击工具栏刷新图标 | 重新扫描所有注解文件 |
 
-滚动同步基于“可见源码的分数行中点 ↔ 注解卡片中心”的分段映射。预览滚动事件按浏览器帧发送，反向同步使用较长的驱动锁避免左右两侧互相争抢滚动位置。
+滚动同步基于“可见源码顶部的分数行位置 ↔ 注解卡片顶部”的分段映射。预览滚动事件按浏览器帧发送；反向同步只忽略与程序化定位目标匹配的编辑器回调，用户随后接管任一侧时无需等待固定锁超时。
 
-默认的 `sourceAligned` 布局按当前 `editor.lineHeight`（未显式配置时由 `editor.fontSize` 推算）保留注解之间的相对源码距离。每个页面都从第一张卡片开始，不复制它之前的源码空白；注解过于密集时，较后的卡片会向下避让，但悬停和点击仍使用保存的真实代码范围。若更喜欢连续列表，可将卡片布局改成 `compact`。
+由于每个页面会省略第一张卡片之前的源码空白，源码文件开头到首个注解起点会共同对应右侧顶部；从右侧顶部反向滚动时，则以首个注解的起始行为明确目标。
+
+默认的 `sourceAligned` 布局按当前 `editor.lineHeight`（未显式配置时由 `editor.fontSize` 推算）让卡片顶部锚定代码范围的起始行，并保留各起点之间的相对源码距离。每个页面都从第一张卡片开始，不复制它之前的源码空白；预览尾部会保留一个视口的对齐空间，使最后一张卡片也能滚到顶部。注解过于密集时，较后的卡片仍会向下避让，但悬停和点击始终使用保存的真实代码范围。若更喜欢连续列表，可将卡片布局改成 `compact`。
 
 ## 命令
 
-- `Source Annotation Preview: Open Annotation Preview to the Side`
-- `Source Annotation Preview: Toggle Annotation Preview Lock`
-- `Source Annotation Preview: Reload Annotations`
-- `Source Annotation Preview: Copy Annotation Stub for Selection`
+- `Code Notes Sidecar: Open Annotation Preview to the Side`
+- `Code Notes Sidecar: Toggle Annotation Preview Lock`
+- `Code Notes Sidecar: Reload Annotations`
+- `Code Notes Sidecar: Copy Annotation Stub for Selection`
 
 最后一个命令可在编辑器中选中一段代码后生成注解骨架并复制到剪贴板。
 
@@ -150,10 +154,10 @@
 
 | 设置 | 默认值 | 说明 |
 | --- | --- | --- |
-| `sourceAnnotationPreview.annotationGlob` | `.code-notes/**/*.json` | 注解文件的工作区相对 glob |
-| `sourceAnnotationPreview.scrollSync` | `bidirectional` | `off`、`editorToPreview` 或 `bidirectional` |
-| `sourceAnnotationPreview.followActiveEditor` | `true` | 未锁定时是否跟随活动源码编辑器 |
-| `sourceAnnotationPreview.cardLayout` | `sourceAligned` | 按源码高度放置卡片，或使用紧凑连续列表 |
+| `codeNotesSidecar.annotationGlob` | `.code-notes/**/*.json` | 注解文件的工作区相对 glob；保持默认值时也会扫描旧目录 `.vscode/source-annotations/**/*.json` |
+| `codeNotesSidecar.scrollSync` | `bidirectional` | `off`、`editorToPreview` 或 `bidirectional` |
+| `codeNotesSidecar.followActiveEditor` | `true` | 未锁定时是否跟随活动源码编辑器 |
+| `codeNotesSidecar.cardLayout` | `sourceAligned` | 按源码高度放置卡片，或使用紧凑连续列表 |
 
 ## 是否提交注解文件
 
@@ -203,7 +207,7 @@ npm run build
 
 ```powershell
 npm run package
-code --install-extension release/source-annotation-preview.vsix
+code --install-extension release/code-notes-sidecar.vsix
 ```
 
 正式版本也可以从 [GitHub Releases](https://github.com/Misty02600/vscode-code-notes-sidecar/releases) 下载 VSIX，

@@ -20,14 +20,14 @@ export function layoutAnnotationCards(
   const safeLineHeight = Math.max(8, lineHeight || 21);
   const firstCard = cards[0];
   const sourceOrigin = firstCard
-    ? Math.max(0, (firstCard.sourceLine + 0.5) * safeLineHeight - firstCard.height / 2)
+    ? Math.max(0, firstCard.sourceLine * safeLineHeight)
     : 0;
   let nextTop = 0;
 
   const placements = cards.map(card => {
     const height = Math.max(0, card.height);
-    const sourceCenter = Math.max(0, (card.sourceLine + 0.5) * safeLineHeight);
-    const idealTop = Math.max(0, sourceCenter - height / 2 - sourceOrigin);
+    const sourceTop = Math.max(0, card.sourceLine * safeLineHeight);
+    const idealTop = Math.max(0, sourceTop - sourceOrigin);
     const top = Math.max(idealTop, nextTop);
 
     nextTop = top + height + gap;

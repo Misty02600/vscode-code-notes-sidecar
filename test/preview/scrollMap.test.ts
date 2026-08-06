@@ -3,6 +3,8 @@ import {
   PreviewLayout,
   interpolate,
   previewOffsetToSourceLine,
+  previewScrollTopToSourceLine,
+  sourceLineToPreviewScrollTop,
   sourceLineToPreviewOffset
 } from "../../src/preview/scrollMap";
 
@@ -38,8 +40,9 @@ describe("source/preview mapping", () => {
       { sourceLine: 20, previewOffset: 100 },
       { sourceLine: 60, previewOffset: 500 }
     ],
-    scrollHeight: 800,
-    clientHeight: 300
+    scrollHeight: 1100,
+    clientHeight: 300,
+    lineCount: 101
   };
 
   it("maps source lines through annotation card anchors", () => {
@@ -63,5 +66,69 @@ describe("source/preview mapping", () => {
         6
       );
     }
+  });
+
+  it("maps a normalized preview origin back to the first annotation start", () => {
+    const normalizedLayout: PreviewLayout = {
+      anchors: [
+        { sourceLine: 20, previewOffset: 0 },
+        { sourceLine: 60, previewOffset: 400 }
+      ],
+      scrollHeight: 800,
+      clientHeight: 300,
+      lineCount: 101
+    };
+
+    expect(sourceLineToPreviewScrollTop(0, normalizedLayout, 101)).toBe(0);
+    expect(sourceLineToPreviewScrollTop(20, normalizedLayout, 101)).toBe(0);
+    expect(previewScrollTopToSourceLine(0, normalizedLayout, 101)).toBe(20);
+  });
+
+  it("uses viewport top positions and clamps at the scroll boundary", () => {
+    const topAlignedLayout: PreviewLayout = {
+      anchors: [
+        { sourceLine: 20, previewOffset: 0 },
+        { sourceLine: 60, previewOffset: 400 }
+      ],
+      scrollHeight: 800,
+      clientHeight: 300,
+      lineCount: 101
+    };
+
+    expect(sourceLineToPreviewScrollTop(40, topAlignedLayout, 101)).toBe(200);
+    expect(previewScrollTopToSourceLine(200, topAlignedLayout, 101)).toBe(40);
+    expect(sourceLineToPreviewScrollTop(100, topAlignedLayout, 101)).toBe(500);
+    expect(previewScrollTopToSourceLine(500, topAlignedLayout, 101)).toBe(100);
+  });
+
+  it("uses the first card as the canonical anchor for a shared source start", () => {
+    const duplicateStartLayout: PreviewLayout = {
+      anchors: [
+        { sourceLine: 20, previewOffset: 0 },
+        { sourceLine: 20, previewOffset: 96 },
+        { sourceLine: 40, previewOffset: 300 }
+      ],
+      scrollHeight: 700,
+      clientHeight: 300,
+      lineCount: 61
+    };
+
+    expect(sourceLineToPreviewScrollTop(20, duplicateStartLayout, 61)).toBe(0);
+    expect(previewScrollTopToSourceLine(0, duplicateStartLayout, 61)).toBe(20);
+    expect(previewScrollTopToSourceLine(96, duplicateStartLayout, 61)).toBe(20);
+  });
+
+  it("maps a non-scrollable preview to the first card instead of averaging anchors", () => {
+    const nonScrollableLayout: PreviewLayout = {
+      anchors: [
+        { sourceLine: 10, previewOffset: 0 },
+        { sourceLine: 30, previewOffset: 96 }
+      ],
+      scrollHeight: 300,
+      clientHeight: 300,
+      lineCount: 50
+    };
+
+    expect(previewScrollTopToSourceLine(0, nonScrollableLayout, 50)).toBe(10);
   });
 });

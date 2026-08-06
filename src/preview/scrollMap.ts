@@ -1,5 +1,7 @@
 export interface ScrollAnchor {
+  /** Zero-based source range start line. */
   sourceLine: number;
+  /** Scroll-container offset of the annotation card's top edge. */
   previewOffset: number;
 }
 
@@ -7,6 +9,7 @@ export interface PreviewLayout {
   anchors: ScrollAnchor[];
   scrollHeight: number;
   clientHeight: number;
+  lineCount: number;
 }
 
 interface Point {
@@ -31,6 +34,16 @@ function collapseDuplicateX(points: Point[]): Point[] {
       x,
       y: values.reduce((sum, value) => sum + value, 0) / values.length
     }))
+    .sort((left, right) => left.x - right.x);
+}
+
+function collapseSourceAnchors(points: Point[]): Point[] {
+  const topByLine = new Map<number, number>();
+  for (const point of points) {
+    topByLine.set(point.x, Math.min(topByLine.get(point.x) ?? point.y, point.y));
+  }
+  return [...topByLine.entries()]
+    .map(([x, y]) => ({ x, y }))
     .sort((left, right) => left.x - right.x);
 }
 
@@ -63,16 +76,63 @@ export function interpolate(value: number, rawPoints: Point[]): number {
   return last.y;
 }
 
-function sourcePoints(layout: PreviewLayout, lineCount: number): Point[] {
+function anchorPoints(layout: PreviewLayout, lineCount: number): Point[] {
   const maximumLine = Math.max(0, lineCount - 1);
-  return [
-    { x: 0, y: 0 },
-    ...layout.anchors.map(anchor => ({
+  const maximumPreviewOffset = Math.max(
+    0,
+    layout.scrollHeight - layout.clientHeight
+  );
+  return layout.anchors
+    .map(anchor => ({
       x: clamp(anchor.sourceLine, 0, maximumLine),
-      y: clamp(anchor.previewOffset, 0, layout.scrollHeight)
-    })),
-    { x: maximumLine, y: layout.scrollHeight }
-  ];
+      y: clamp(anchor.previewOffset, 0, maximumPreviewOffset)
+    }))
+    .sort((left, right) => left.x - right.x || left.y - right.y);
+}
+
+function addBoundaryPoints(
+  anchors: Point[],
+  layout: PreviewLayout,
+  lineCount: number
+): Point[] {
+  const maximumLine = Math.max(0, lineCount - 1);
+  const maximumPreviewOffset = Math.max(
+    0,
+    layout.scrollHeight - layout.clientHeight
+  );
+
+  if (anchors.length === 0) {
+    return maximumLine === 0
+      ? [{ x: 0, y: 0 }]
+      : [
+          { x: 0, y: 0 },
+          { x: maximumLine, y: maximumPreviewOffset }
+        ];
+  }
+
+  const points = [...anchors];
+  const first = anchors[0]!;
+  const last = anchors[anchors.length - 1]!;
+
+  // Source-aligned pages intentionally remove the blank source area before the
+  // first card. In that layout, preview offset 0 belongs to the first annotation
+  // rather than both line 0 and the annotation start.
+  if (first.x > 0 && first.y > 0) {
+    points.unshift({ x: 0, y: 0 });
+  }
+  if (last.x < maximumLine && last.y < maximumPreviewOffset) {
+    points.push({ x: maximumLine, y: maximumPreviewOffset });
+  }
+
+  return points;
+}
+
+function sourcePoints(layout: PreviewLayout, lineCount: number): Point[] {
+  return addBoundaryPoints(
+    collapseSourceAnchors(anchorPoints(layout, lineCount)),
+    layout,
+    lineCount
+  );
 }
 
 export function sourceLineToPreviewOffset(
@@ -88,9 +148,43 @@ export function previewOffsetToSourceLine(
   layout: PreviewLayout,
   lineCount: number
 ): number {
-  const inversePoints = sourcePoints(layout, lineCount).map(point => ({
-    x: point.y,
-    y: point.x
-  }));
+  if (layout.scrollHeight <= layout.clientHeight && layout.anchors.length > 0) {
+    const firstAnchor = [...layout.anchors].sort(
+      (left, right) =>
+        left.previewOffset - right.previewOffset || left.sourceLine - right.sourceLine
+    )[0]!;
+    return clamp(firstAnchor.sourceLine, 0, Math.max(0, lineCount - 1));
+  }
+  const inversePoints = addBoundaryPoints(
+    anchorPoints(layout, lineCount),
+    layout,
+    lineCount
+  ).map(point => ({ x: point.y, y: point.x }));
   return interpolate(previewOffset, inversePoints);
+}
+
+export function sourceLineToPreviewScrollTop(
+  sourceLine: number,
+  layout: PreviewLayout,
+  lineCount: number
+): number {
+  const maximumScroll = Math.max(0, layout.scrollHeight - layout.clientHeight);
+  return clamp(
+    sourceLineToPreviewOffset(sourceLine, layout, lineCount),
+    0,
+    maximumScroll
+  );
+}
+
+export function previewScrollTopToSourceLine(
+  scrollTop: number,
+  layout: PreviewLayout,
+  lineCount: number
+): number {
+  const maximumScroll = Math.max(0, layout.scrollHeight - layout.clientHeight);
+  return previewOffsetToSourceLine(
+    clamp(scrollTop, 0, maximumScroll),
+    layout,
+    lineCount
+  );
 }
