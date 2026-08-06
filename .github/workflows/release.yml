@@ -53,12 +53,23 @@ jobs:
           echo "VSIX_ASSET=${asset}" >> "${GITHUB_ENV}"
 
       - name: Create GitHub release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$RELEASE_TAG"
-          "$VSIX_ASSET"
-          "$VSIX_ASSET.sha256"
-          --target "$GITHUB_SHA"
-          --title "Code Notes Sidecar $RELEASE_VERSION"
-          --generate-notes
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub release $RELEASE_TAG already exists."
+          else
+            gh release create "$RELEASE_TAG" \
+              "$VSIX_ASSET" \
+              "$VSIX_ASSET.sha256" \
+              --target "$GITHUB_SHA" \
+              --title "Code Notes Sidecar $RELEASE_VERSION" \
+              --generate-notes
+          fi
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath "$VSIX_ASSET" --skip-duplicate
