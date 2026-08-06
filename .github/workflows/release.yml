@@ -16,6 +16,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,6 +72,5 @@ jobs:
           fi
 
       - name: Publish to VS Code Marketplace
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        if: env.VSCE_PAT != ''
         run: npx vsce publish --packagePath "$VSIX_ASSET" --skip-duplicate
