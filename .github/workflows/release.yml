@@ -11,13 +11,16 @@ concurrency:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: marketplace
     env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OIDC_CONFIGURED: ${{ secrets.AZURE_CLIENT_ID != '' && secrets.AZURE_TENANT_ID != '' && secrets.AZURE_SUBSCRIPTION_ID != '' }}
+      PAT_CONFIGURED: ${{ secrets.VSCE_PAT != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +28,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -71,6 +74,43 @@ jobs:
               --generate-notes
           fi
 
-      - name: Publish to VS Code Marketplace
-        if: env.VSCE_PAT != ''
+      - name: Sign in to Azure with GitHub OIDC
+        if: env.OIDC_CONFIGURED == 'true'
+        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve Marketplace profile ID
+        if: env.OIDC_CONFIGURED == 'true'
+        shell: bash
+        run: |
+          profile_id="$(az rest \
+            --method get \
+            --url 'https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1' \
+            --resource 499b84ac-1321-427f-aa17-267ca6975798 \
+            --query id \
+            --output tsv)"
+          test -n "$profile_id"
+          echo "::notice title=Marketplace profile ID::${profile_id}"
+
+      - name: Verify Marketplace identity
+        if: env.OIDC_CONFIGURED == 'true'
+        run: npx vsce verify-pat misty02600 --azure-credential
+
+      - name: Publish to VS Code Marketplace with Microsoft Entra ID
+        if: env.OIDC_CONFIGURED == 'true'
+        run: npx vsce publish --azure-credential --packagePath "$VSIX_ASSET" --skip-duplicate
+
+      - name: Publish to VS Code Marketplace with temporary PAT fallback
+        if: env.OIDC_CONFIGURED != 'true' && env.PAT_CONFIGURED == 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx vsce publish --packagePath "$VSIX_ASSET" --skip-duplicate
+
+      - name: Require Marketplace credentials
+        if: env.OIDC_CONFIGURED != 'true' && env.PAT_CONFIGURED != 'true'
+        run: |
+          echo "Neither Microsoft Entra OIDC nor the temporary PAT fallback is configured." >&2
+          exit 1
